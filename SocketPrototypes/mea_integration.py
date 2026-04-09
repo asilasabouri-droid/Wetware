@@ -32,12 +32,12 @@ class IntegratedMEAInterface:
         self.device_connected = False
         self.channels_in_block = 0
         self.num_channels = 60
-        self.buffer_size = 100
+        self.buffer_size = 2500  # BUG #12 FIX: Increased from 100 to 2500
         self.samplerate = 50000
         self.data_buffer = np.zeros((self.num_channels, self.buffer_size))
         self.data_ready = Event()
         self.recording_thread = None
-        self.stop_recording = Event()
+        self.stop_recording_event = Event()  # BUG #9 FIX: Renamed variable to avoid conflict with function
         self.last_action = 0
         self.failure_count = 0
 
@@ -100,7 +100,7 @@ class IntegratedMEAInterface:
         self.dacq.EnableDigitalIn(DigitalDatastreamEnableEnumNet.DigitalIn |
                                  DigitalDatastreamEnableEnumNet.DigitalOut |
                                  DigitalDatastreamEnableEnumNet.Hs1SidebandLow |
-                                 DigitalDatastreamEnumNet.Hs1SidebandHigh, 0)
+                                 DigitalDatastreamEnableEnumNet.Hs1SidebandHigh, 0) # BUG #8 FIX applied here
         self.dacq.EnableChecksum(True, 0)
         
         # Create boxed objects for out parameters
@@ -127,7 +127,7 @@ class IntegratedMEAInterface:
         
         # Configure channel block
         queue_size = self.samplerate
-        threshold = self.samplerate // 100
+        threshold = self.samplerate // 10  # BUG #15 FIX: Divided by 10 instead of 100
         
         self.dacq.ChannelBlock.SetSelectedChannels(
             self.channels_in_block // 2, 
@@ -170,7 +170,7 @@ class IntegratedMEAInterface:
         print("Recording started")
         
         # Start a thread to continuously process data
-        self.stop_recording.clear()
+        self.stop_recording_event.clear()  # BUG #9 FIX applied
         self.recording_thread = Thread(target=self.recording_loop)
         self.recording_thread.daemon = True
         self.recording_thread.start()
@@ -180,7 +180,7 @@ class IntegratedMEAInterface:
     def stop_recording(self):
         """Stop recording data from the MEA."""
         if self.recording_thread and self.recording_thread.is_alive():
-            self.stop_recording.set()
+            self.stop_recording_event.set()  # BUG #9 FIX applied
             self.recording_thread.join(timeout=2.0)
             
         if self.device_connected:
@@ -189,7 +189,7 @@ class IntegratedMEAInterface:
     
     def disconnect(self):
         """Disconnect from the MEA device."""
-        self.stop_recording()
+        self.stop_recording()  # This now successfully calls the function without variable conflict
         
         if self.bstim:
             self.bstim.Disconnect()
@@ -231,7 +231,7 @@ class IntegratedMEAInterface:
     
     def recording_loop(self):
         """Background thread to continuously process incoming data."""
-        while not self.stop_recording.is_set():
+        while not self.stop_recording_event.is_set():  # BUG #9 FIX applied
             # Wait for new data with timeout
             if self.data_ready.wait(timeout=0.1):
                 self.data_ready.clear()
@@ -297,7 +297,7 @@ class IntegratedMEAInterface:
     
     def stimulate_neurons(self, pole_angle, pole_angular_velocity, reward):
         """Generate and apply stimulation based on pole angle, angular velocity, and reward."""
-        from square import generate_stim_wave
+        from square import generate_stim_wave  # BUG #10 context: safely imported from square.py
         
         # Determine which pattern to use based on pole angle
         if np.abs(pole_angle) < 0.262:  # ~15 degrees
